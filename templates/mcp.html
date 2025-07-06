@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG Demo - MCP Servers 管理</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Vue.js -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.2.47/dist/vue.global.prod.js"></script>
+  <!-- Axios for API calls -->
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.4.0/dist/axios.min.js"></script>
+  <style>
+    .server-list {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .tool-list {
+      margin-left: 20px;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="container mt-5">
+    <!-- 标题 -->
+    <h1 class="mb-4">MCP Servers 管理</h1>
+    <!-- 导航 -->
+    <nav class="mb-4">
+      <a href="/" class="btn btn-primary me-2">前往对话页面</a>
+    </nav>
+    <!-- 使用说明 -->
+    <div class="alert alert-info">
+      <h5>使用说明</h5>
+      <ul class="mb-0">
+        <li>MCP (Model Context Protocol) 服务器可以为AI模型提供额外的工具和功能</li>
+        <li>添加服务器后，系统会自动获取该服务器提供的工具列表</li>
+        <li>测试时可以使用 <code>http://localhost:8000</code> 等本地地址</li>
+        <li>生产环境请使用 HTTPS 协议确保安全</li>
+      </ul>
+    </div>
+
+    <!-- MCP Servers 管理区域 -->
+    <div class="card">
+      <div class="card-header">MCP Servers 管理</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label for="serverName" class="form-label">服务器名称</label>
+          <input v-model="newServer.name" type="text" class="form-control" id="serverName" placeholder="例如：Production MCP">
+          <label for="serverUrl" class="form-label mt-2">服务器 URL</label>
+          <input v-model="newServer.url" type="text" class="form-control" id="serverUrl" placeholder="例如：http://localhost:3000 或 https://mcp.example.com/sse">
+          <label for="serverDescription" class="form-label mt-2">描述</label>
+          <textarea v-model="newServer.description" class="form-control" id="serverDescription" placeholder="可选：服务器用途说明"></textarea>
+          <label for="serverAuthType" class="form-label mt-2">认证类型</label>
+          <select v-model="newServer.auth_type" class="form-control" id="serverAuthType">
+            <option value="none">无认证</option>
+            <option value="api_key">API Key</option>
+            <option value="bearer">Bearer Token</option>
+          </select>
+          <label for="serverAuthValue" class="form-label mt-2">认证值</label>
+          <input v-model="newServer.auth_value" type="text" class="form-control" id="serverAuthValue" placeholder="例如：API Key 或 Token">
+          <button class="btn btn-primary mt-3" @click="addServer">
+            <span v-if="editingServerId">更新服务器</span>
+            <span v-else>添加服务器</span>
+          </button>
+          <button class="btn btn-secondary mt-3 ms-2" @click="addExampleServer">添加示例服务器</button>
+        </div>
+        <!-- 服务器列表 -->
+        <div class="server-list">
+          <ul class="list-group">
+            <li v-for="server in mcpServers" :key="server.id" class="list-group-item">
+              <div class="d-flex justify-content-between align-items-center">
+                <span v-text="`${server.name} (${server.url})`"></span>
+                <div>
+                  <button class="btn btn-info btn-sm me-2" @click="refreshTools(server.id)">刷新工具</button>
+                  <button class="btn btn-warning btn-sm me-2" @click="editServer(server)">编辑</button>
+                  <button class="btn btn-danger btn-sm" @click="deleteServer(server.id)">删除</button>
+                </div>
+              </div>
+              <!-- 显示关联工具 -->
+              <div class="tool-list mt-2" v-if="serverTools[server.id] && serverTools[server.id].length">
+                <strong>工具列表：</strong>
+                <ul>
+                  <li v-for="tool in serverTools[server.id]" :key="tool.name" v-text="`${tool.name} - ${tool.description}`"></li>
+                </ul>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          mcpServers: [],
+          serverTools: {},
+          newServer: {
+            name: '',
+            url: '',
+            description: '',
+            auth_type: 'none',
+            auth_value: ''
+          },
+          editingServerId: null
+        };
+      },
+      mounted() {
+        this.fetchMcpServers();
+      },
+      methods: {
+        async fetchMcpServers() {
+          try {
+            const response = await axios.get('/api/mcp/servers');
+            this.mcpServers = response.data;
+            console.log('获取到MCP服务器:', this.mcpServers);
+            for (const server of this.mcpServers) {
+              await this.fetchServerTools(server.id);
+            }
+          } catch (error) {
+            console.error('获取 MCP 服务器列表失败:', error);
+            if (error.response) {
+              console.error('错误详情:', error.response.data);
+              alert(`获取 MCP 服务器列表失败: ${error.response.data.detail || error.response.statusText}`);
+            } else {
+              alert('获取 MCP 服务器列表失败！请检查网络连接。');
+            }
+          }
+        },
+        async fetchServerTools(serverId) {
+          try {
+            const response = await axios.get('/api/mcp/tools', { params: { server_id: serverId } });
+            this.serverTools[serverId] = response.data;
+            console.log(`服务器 ${serverId} 的工具:`, this.serverTools[serverId]);
+          } catch (error) {
+            console.error(`获取服务器 ${serverId} 的工具列表失败:`, error);
+            this.serverTools[serverId] = [];
+          }
+        },
+        async addServer() {
+          if (!this.newServer.name || !this.newServer.url) {
+            alert('服务器名称和 URL 为必填项！');
+            return;
+          }
+          try {
+            new URL(this.newServer.url);
+          } catch (e) {
+            alert('请输入有效的 URL！');
+            return;
+          }
+          try {
+            if (this.editingServerId) {
+              await axios.put(`/api/mcp/servers/${this.editingServerId}`, this.newServer);
+              alert('服务器更新成功！');
+            } else {
+              await axios.post('/api/mcp/servers', this.newServer);
+              alert('服务器添加成功！');
+            }
+            this.newServer = { name: '', url: '', description: '', auth_type: 'none', auth_value: '' };
+            this.editingServerId = null;
+            this.fetchMcpServers();
+          } catch (error) {
+            console.error('操作服务器失败:', error);
+            alert(`操作服务器失败：${error.response?.data?.detail || error.message}`);
+          }
+        },
+        editServer(server) {
+          this.newServer = { ...server };
+          this.editingServerId = server.id;
+        },
+        async deleteServer(serverId) {
+          if (!confirm('确定要删除此 MCP 服务器吗？')) return;
+          try {
+            await axios.delete(`/api/mcp/servers/${serverId}`);
+            alert('服务器删除成功！');
+            this.fetchMcpServers();
+          } catch (error) {
+            console.error('删除服务器失败:', error);
+            alert('删除服务器失败！');
+          }
+        },
+        async refreshTools(serverId) {
+          try {
+            await axios.post(`/api/mcp/servers/${serverId}/refresh-tools`);
+            alert('工具刷新成功！');
+            await this.fetchServerTools(serverId);
+          } catch (error) {
+            console.error('刷新工具失败:', error);
+            alert('刷新工具失败！');
+          }
+        },
+        addExampleServer() {
+          this.newServer = {
+            name: '示例MCP服务器',
+            url: 'http://localhost:3000',
+            description: '用于测试的示例MCP服务器',
+            auth_type: 'none',
+            auth_value: ''
+          };
+          this.editingServerId = null;
+        }
+      }
+    }).mount('#app');
+  </script>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

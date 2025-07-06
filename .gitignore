@@ -1,0 +1,69 @@
+# 环境变量和配置
+.env
+*.env
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 缓存文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+cache/
+*.pkl
+
+# 上传和处理的文档
+uploads/
+chunks/
+storage/
+*.faiss
+*.npy
+
+# 虚拟环境
+venv/
+env/
+.venv/
+
+# 模型文件
+local_m3e_model/*.safetensors
+local_m3e_model/*.bin
+local_m3e_model/pytorch_model.bin
+
+# 日志文件
+*.log
+logs/
+
+# IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 测试和覆盖率
+.coverage
+.pytest_cache/
+.tox/
+htmlcov/
+
+# 构建和分发
+build/
+dist/
+*.egg-info/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~

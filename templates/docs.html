@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文档管理 - 植众智控企业知识库问答系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+            background: #f5f6fa;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        .top-title {
+            width: 100%;
+            text-align: center;
+            font-size: 2.2rem;
+            font-weight: bold;
+            padding: 32px 0 18px 0;
+            background: #fff;
+            color: #23272f;
+            letter-spacing: 2px;
+            border-bottom: 1px solid #e0e0e0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .drop-zone {
+            border: 2px dashed #4a5568;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            background: #fff;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+        .drop-zone.dragover {
+            border-color: #4299e1;
+            background-color: #ebf8ff;
+        }
+        .file-list {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+            transition: all 0.3s ease;
+        }
+        .file-item:hover {
+            background-color: #f7fafc;
+        }
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        .file-icon {
+            width: 40px;
+            height: 40px;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f0f0f0;
+            border-radius: 4px;
+        }
+        .file-info {
+            flex: 1;
+        }
+        .file-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        .file-type {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .back-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            background: #4e8cff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .back-btn:hover {
+            background: #3b7de3;
+        }
+        .upload-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #4e8cff;
+            height: 3px;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="top-title">文档管理</div>
+        <div class="container">
+            <!-- 拖拽上传区域 -->
+            <div class="drop-zone" 
+                 ref="dropZone"
+                 @dragover.prevent="handleDragOver"
+                 @dragleave="handleDragLeave"
+                 @drop.prevent="handleDrop"
+                 @click="triggerFileInput">
+                <input type="file" ref="fileInput" hidden @change="handleFileChange" multiple>
+                <div class="text-gray-600">
+                    <p class="text-xl mb-2">拖拽文件到此处或点击选择文件</p>
+                    <p class="text-sm">支持的文件类型：PDF、Word、Excel、TXT</p>
+                </div>
+            </div>
+
+            <!-- 文件列表 -->
+            <div class="file-list">
+                <h2 class="text-xl font-bold mb-4">已上传文档</h2>
+                <div v-for="file in files" :key="file.name" class="file-item">
+                    <div class="file-icon">
+                        <span class="text-gray-500">[[ getFileIcon(file.name) ]]</span>
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">[[ file.name ]]</div>
+                        <div class="file-type">[[ getFileType(file.name) ]]</div>
+                    </div>
+                </div>
+                <div v-if="files.length === 0" class="text-center text-gray-500 py-8">
+                    暂无上传文档
+                </div>
+            </div>
+        </div>
+
+        <!-- 返回按钮 -->
+        <button class="back-btn" @click="goBack">返回问答页面</button>
+
+        <!-- 上传进度条 -->
+        <div v-if="uploadProgress.visible" class="upload-progress" :style="{ width: uploadProgress.percent + '%' }"></div>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            delimiters: ['[[', ']]'],
+            data() {
+                return {
+                    files: [],
+                    uploadProgress: {
+                        visible: false,
+                        percent: 0
+                    },
+                    supportedTypes: {
+                        '.pdf': 'PDF文档',
+                        '.docx': 'Word文档',
+                        '.xlsx': 'Excel表格',
+                        '.xls': 'Excel表格',
+                        '.txt': '文本文件'
+                    }
+                }
+            },
+            methods: {
+                async loadFiles() {
+                    try {
+                        const response = await fetch('/files');
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        const data = await response.json();
+                        const fileList = data.files || [];
+                        this.files = fileList.map(name => ({
+                            name,
+                            type: this.getFileType(name)
+                        }));
+                    } catch (error) {
+                        console.error('加载文件列表失败:', error);
+                        alert('加载文件列表失败，请刷新页面重试');
+                    }
+                },
+                getFileIcon(filename) {
+                    const ext = '.' + filename.split('.').pop().toLowerCase();
+                    const icons = {
+                        '.pdf': '📄',
+                        '.docx': '📝',
+                        '.xlsx': '📊',
+                        '.xls': '📊',
+                        '.txt': '📄'
+                    };
+                    return icons[ext] || '📄';
+                },
+                getFileType(filename) {
+                    const ext = '.' + filename.split('.').pop().toLowerCase();
+                    return this.supportedTypes[ext] || '未知类型';
+                },
+                handleDragOver() {
+                    const dropZone = this.$refs.dropZone;
+                    if (dropZone) {
+                        dropZone.classList.add('dragover');
+                    }
+                },
+                handleDragLeave() {
+                    const dropZone = this.$refs.dropZone;
+                    if (dropZone) {
+                        dropZone.classList.remove('dragover');
+                    }
+                },
+                handleDrop(e) {
+                    this.handleFiles(e.dataTransfer.files);
+                },
+                triggerFileInput() {
+                    this.$refs.fileInput.click();
+                },
+                async handleFiles(files) {
+                    for (const file of files) {
+                        const extension = '.' + file.name.split('.').pop().toLowerCase();
+                        if (!this.supportedTypes[extension]) {
+                            alert(`不支持的文件类型: ${extension}`);
+                            continue;
+                        }
+
+                        const formData = new FormData();
+                        formData.append('file', file);
+
+                        try {
+                            this.uploadProgress = {
+                                visible: true,
+                                percent: 30
+                            };
+
+                            // 使用 XMLHttpRequest 以便获取上传进度
+                            await new Promise((resolve, reject) => {
+                                const xhr = new XMLHttpRequest();
+                                xhr.open('POST', '/upload', true);
+                                xhr.upload.onprogress = (e) => {
+                                    if (e.lengthComputable) {
+                                        this.uploadProgress.percent = Math.round((e.loaded / e.total) * 80);
+                                    }
+                                };
+                                xhr.onload = () => {
+                                    if (xhr.status === 200) {
+                                        this.uploadProgress.percent = 100;
+                                        this.files.unshift({
+                                            name: file.name,
+                                            type: this.supportedTypes[extension]
+                                        });
+                                        alert('上传成功！');
+                                        resolve();
+                                    } else {
+                                        reject(new Error('上传失败'));
+                                    }
+                                };
+                                xhr.onerror = () => reject(new Error('上传失败'));
+                                xhr.send(formData);
+                            });
+                        } catch (error) {
+                            console.error('上传失败:', error);
+                            alert(`上传失败: ${error.message}`);
+                        }
+
+                        setTimeout(() => {
+                            this.uploadProgress.visible = false;
+                            this.uploadProgress.percent = 0;
+                        }, 1000);
+                    }
+                },
+                handleFileChange(e) {
+                    this.handleFiles(e.target.files);
+                },
+                goBack() {
+                    window.location.href = '/';
+                }
+            },
+            mounted() {
+                this.loadFiles();
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

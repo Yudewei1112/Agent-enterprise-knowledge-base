@@ -1,0 +1,56 @@
+# Web框架和服务器
+fastapi==0.115.12
+uvicorn==0.34.2
+pydantic==2.11.3
+python-multipart==0.0.20
+
+# AI和机器学习
+# PyTorch - CUDA 11.8版本 (根据实际安装版本)
+# 如需使用CUDA，可能需要根据你的CUDA下载特定版本的PyTorch
+# 如需其他CUDA版本，请参考: https://pytorch.org/get-started/locally/
+torch==2.7.1+cu118
+torchaudio==2.7.1+cu118
+torchvision==0.22.1+cu118
+# 如果没有CUDA支持，可以使用CPU版本:
+# torch==2.7.1+cpu
+# torchaudio==2.7.1+cpu
+# torchvision==0.22.1+cpu
+sentence-transformers==5.0.0
+# FAISS - GPU版本，如果没有GPU可以使用 faiss-cpu
+faiss-gpu==1.10.0
+numpy==2.3.1
+openai==1.93.0
+fastmcp==2.5.1
+
+# LangGraph和LangChain
+langgraph==0.5.1
+langchain==0.3.26
+langchain-core==0.3.67
+langchain-openai==0.3.27
+
+# HTTP客户端
+requests==2.32.4
+aiohttp==3.11.8
+
+# 文档处理
+PyPDF2==3.0.1
+pdfplumber==0.11.7
+pdf2image==1.17.0
+python-docx==1.2.0
+openpyxl==3.1.5
+pandas==2.3.0
+
+# 图像处理和OCR
+Pillow==11.3.0
+pytesseract==0.3.10
+
+# 数据库
+aiosqlite==0.20.0
+
+# 文本处理
+beautifulsoup4==4.13.4
+markdown==3.8
+python-dotenv==1.1.1
+
+# Windows COM支持 (仅Windows)
+pywin32==310
