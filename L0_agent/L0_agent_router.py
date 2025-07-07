@@ -50,6 +50,7 @@ class AgentRouter:
         """工具执行后的路由决策
 
         根据ReAct推理步骤是否完成来决定下一步:
+        - 如果工具达到最大重试次数，直接生成最终答案
         - 如果推理未结束，进入`continue_react_reasoning`节点准备下一步
         - 如果推理已结束，进入`reflect_answer`节点进行反思
         - 如果出现严重错误，直接生成最终答案
@@ -61,6 +62,13 @@ class AgentRouter:
             下一个节点名称
         """
         print(f"\n=== 工具执行后路由决策 ===")
+        
+        # 检查工具执行状态，如果达到最大重试次数，直接生成最终答案
+        tool_execution_status = state.get('tool_execution_status')
+        if tool_execution_status == 'max_retries_reached':
+            print(f"检测到工具达到最大重试次数，直接生成最终答案")
+            return "generate_final_answer"
+        
         is_final_step = state.get('react_step_is_final', True)
         print(f"当前步骤是否为最后一步: {is_final_step}")
 
@@ -93,6 +101,12 @@ class AgentRouter:
         
         # 增加迭代计数
         state['iteration_count'] += 1
+        
+        # 检查工具执行状态，如果达到最大重试次数，直接生成最终答案
+        tool_execution_status = state.get('tool_execution_status')
+        if tool_execution_status == 'max_retries_reached':
+            print(f"检测到工具达到最大重试次数，直接生成最终答案")
+            return "generate_final_answer"
         
         # 检查熔断条件
         circuit_breaker_result = self._check_circuit_breaker(state)
@@ -156,7 +170,7 @@ class AgentRouter:
             可用工具集合
         """
         all_tools = {"local_document_rag_search", "internet_search", "mcp_service_lookup"}
-        used_tools = state['used_tools']
+        used_tools = set(state['used_tools'])  # 转换为set类型
         failed_tools = set()
         
         # 排除失败次数过多的工具
@@ -229,11 +243,12 @@ router = AgentRouter()
 
 
 # 路由函数（供LangGraph使用）
-def route_after_intent_analysis(state: AgentState) -> Literal["execute_tool", "generate_final_answer"]:
+def route_after_intent_analysis(state: AgentState) -> Literal["execute_tool", "simple_workflow", "generate_final_answer"]:
     """意图分析后的路由函数
     
     根据意图分析的结果决定下一步:
-    - 如果选择了工具，路由到工具执行节点
+    - 如果是简单问题且启用了固定工作流，路由到简单工作流
+    - 如果选择了工具（复杂问题），路由到工具执行节点
     - 否则路由到最终答案生成节点
     
     参数:
@@ -244,8 +259,14 @@ def route_after_intent_analysis(state: AgentState) -> Literal["execute_tool", "g
     """
     print(f"\n=== 意图分析后路由 ===")
     print(f"路由函数 - 当前状态键: {list(state.keys())}")
-    print(f"路由函数 - 是否有selected_tool: {'selected_tool' in state}")
     
+    # 检查是否是简单问题的固定工作流
+    if state.get('simple_workflow_active'):
+        print(f"🚀 简单问题固定工作流激活，路由到简单工作流")
+        return "simple_workflow"
+    
+    # 复杂问题的原有逻辑
+    print(f"路由函数 - 是否有selected_tool: {'selected_tool' in state}")
     selected_tool = state.get('selected_tool')
     print(f"路由函数 - selected_tool值: {selected_tool}")
     print(f"路由函数 - selected_tool类型: {type(selected_tool)}")

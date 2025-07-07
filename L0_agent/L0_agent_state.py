@@ -83,8 +83,8 @@ class AgentState(TypedDict):
     messages: List[str]
     
     # 记录已经使用过的工具，避免重复低效的检索
-    # 格式: {"tool_name_1", "tool_name_2"}
-    used_tools: Set[str]
+    # 格式: ["tool_name_1", "tool_name_2"]
+    used_tools: List[str]
     
     # 记录每个工具的失败次数，用于熔断
     # 格式: {"tool_name": count}
@@ -171,6 +171,15 @@ class AgentState(TypedDict):
     reasoning_strategy: str  # 推理策略: "direct", "simplified", "multi_hop"
     complexity_confidence: float  # 复杂度评估置信度
     complexity_factors: List[str]  # 复杂度关键因素
+    
+    # === 简单工作流字段 ===
+    simple_workflow_active: bool  # 简单工作流是否激活
+    simple_workflow_step: int  # 当前简单工作流步骤
+    simple_workflow_retry_count: int  # 简单工作流重试计数
+    simple_tool_retry_count: int  # 简单工作流工具重试计数
+    simple_workflow_mode: bool  # 标记使用简单工作流模式
+    
+
 
 
 def create_initial_state(query: str, conversation_id: Optional[str] = None, 
@@ -198,7 +207,6 @@ def create_initial_state(query: str, conversation_id: Optional[str] = None,
         query=query,
         rewritten_query=query,  # 初始时与原始查询相同
         messages=[f"用户问题: {query}"],
-        used_tools=set(),
         tool_retry_counts={},
         current_answer="",
         reflection_result="",
@@ -225,7 +233,14 @@ def create_initial_state(query: str, conversation_id: Optional[str] = None,
         current_step_index=0,
         last_tool_result=None,
         react_step_is_final=False,  # 新增字段初始化
-        step_wise_results=[]  # 初始化分步推理记录
+        step_wise_results=[],  # 初始化分步推理记录
+        # 简单工作流字段初始化
+        simple_workflow_active=False,
+        simple_workflow_step=0,
+        simple_workflow_retry_count=0,
+        simple_tool_retry_count=0,
+        simple_workflow_mode=False,
+        used_tools=[]  # 工具记忆初始化
     )
 
 
@@ -273,7 +288,7 @@ def cleanup_temporary_state(state: AgentState) -> AgentState:
         query=state['query'],
         rewritten_query=state['rewritten_query'],  # 保留改写后的查询
         messages=essential_messages,
-        used_tools=set(),  # 清理
+        used_tools=[],  # 清理
         tool_retry_counts={},  # 清理
         current_answer=state['current_answer'],
         reflection_result="",  # 清理

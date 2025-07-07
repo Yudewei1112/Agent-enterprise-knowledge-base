@@ -228,18 +228,27 @@ class AgentToolManager:
         """
         return self.tools.get(tool_name)
     
-    def get_available_tools(self, used_tools: set) -> Dict[str, BaseTool]:
+    def get_available_tools(self, used_tools=None) -> Dict[str, BaseTool]:
         """获取可用工具（排除已使用的）
         
         参数:
-            used_tools: 已使用的工具集合
+            used_tools: 已使用的工具集合或列表，可选
             
         返回:
             可用工具字典
         """
+        if used_tools is None:
+            # 如果没有传递used_tools，返回所有工具的描述信息
+            return {
+                name: {'description': tool.description} 
+                for name, tool in self.tools.items()
+            }
+        
+        # 兼容list和set类型的used_tools
+        used_tools_set = set(used_tools) if isinstance(used_tools, list) else used_tools
         return {
             name: tool for name, tool in self.tools.items() 
-            if name not in used_tools
+            if name not in used_tools_set
         }
     
     def get_tool_descriptions(self, used_tools: set) -> str:

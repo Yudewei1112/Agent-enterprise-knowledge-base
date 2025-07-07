@@ -79,6 +79,7 @@ class LangGraphAgent:
         workflow.add_node("reflect_answer", self.nodes.reflection_node)
         workflow.add_node("generate_final_answer", self.nodes.final_answer_node)
         workflow.add_node("continue_react_reasoning", self.nodes.continue_react_reasoning_node)
+        workflow.add_node("simple_workflow", self.nodes.simple_workflow)
 
         # 设置入口点
         workflow.set_entry_point("analyze_intent")
@@ -89,6 +90,7 @@ class LangGraphAgent:
             route_after_intent_analysis,
             {
                 "execute_tool": "execute_tool",
+                "simple_workflow": "simple_workflow",
                 "generate_final_answer": "generate_final_answer"
             }
         )
@@ -125,6 +127,9 @@ class LangGraphAgent:
                 "end_with_best_effort": "generate_final_answer"
             }
         )
+        
+        # 简单工作流直接路由到最终答案生成
+        workflow.add_edge("simple_workflow", "generate_final_answer")
         
         # 最终答案节点连接到结束
         workflow.add_edge("generate_final_answer", END)
