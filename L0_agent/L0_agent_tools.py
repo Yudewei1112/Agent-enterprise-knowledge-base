@@ -152,6 +152,7 @@ class MCPServiceTool(BaseTool):
     async def _arun(self, query: str, conversation_history: List[Dict] = None, 
                    model_name: str = None) -> str:
         """异步执行MCP服务检索"""
+        client = None
         try:
             if conversation_history is None:
                 conversation_history = []
@@ -175,6 +176,14 @@ class MCPServiceTool(BaseTool):
             return result
         except Exception as e:
             return f"MCP服务检索失败: {str(e)}"
+        finally:
+            # 确保客户端正确关闭
+            if client is not None:
+                try:
+                    # AsyncOpenAI使用close()方法而不是aclose()
+                    await client.close()
+                except Exception as close_error:
+                    print(f"关闭AsyncOpenAI客户端时出错: {close_error}")
     
     def _run(self, query: str, conversation_history: List[Dict] = None, 
             model_name: str = None) -> str:

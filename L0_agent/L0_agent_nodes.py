@@ -1714,7 +1714,10 @@ class AgentNodes:
             return state['current_answer']
     
     async def _select_tool_with_llm_for_simple(self, state: AgentState) -> Dict[str, Any]:
-        """为简单问题使用大模型选择工具
+        """为简单问题使用大模型选择工具 - 改进版
+        
+        使用router的_get_available_tools方法获取可用工具，
+        避免选择已使用或失败的工具
         
         参数:
             state: 当前状态
@@ -1723,33 +1726,61 @@ class AgentNodes:
             包含选择的工具和改写查询的字典
         """
         try:
-            # 动态获取可用工具列表
+            # 使用router的方法获取可用工具（排除已使用和失败的工具）
+            from L0_agent_router import router
             from L0_agent_tools import AgentToolManager
+            
+            available_tool_names = router._get_available_tools(state)
+            
+            # 如果没有可用工具，返回None
+            if not available_tool_names:
+                print("⚠️ 没有可用工具")
+                return None
+            
+            # 获取工具详细信息
             tools_instance = AgentToolManager()
-            available_tools = tools_instance.get_available_tools()
+            all_tools_info = tools_instance.get_available_tools()
             
-            # 构建工具描述
-            tools_description = []
-            for tool_name, tool_info in available_tools.items():
-                description = tool_info.get('description', '无描述')
-                tools_description.append(f"- {tool_name}: {description}")
+            # 构建可用工具描述
+            available_tools_description = []
+            for tool_name in available_tool_names:
+                if tool_name in all_tools_info:
+                    description = all_tools_info[tool_name].get('description', '无描述')
+                    available_tools_description.append(f"- {tool_name}: {description}")
             
-            tools_text = "\n".join(tools_description)
+            tools_text = "\n".join(available_tools_description)
             
-            # 构建提示词
+            # 构建已使用工具和失败工具的信息
+            used_tools = state.get('used_tools', [])
+            failed_tools = []
+            for tool_name, retry_count in state.get('tool_retry_counts', {}).items():
+                if retry_count >= 3:
+                    failed_tools.append(tool_name)
+            
+            # 构建增强的提示词
+            constraint_info = ""
+            if used_tools or failed_tools:
+                constraint_info += "\n\n⚠️ 工具选择约束:"
+                if used_tools:
+                    constraint_info += f"\n- 已使用过的工具（避免重复选择）: {', '.join(used_tools)}"
+                if failed_tools:
+                    constraint_info += f"\n- 已失败的工具（不可选择）: {', '.join(failed_tools)}"
+                constraint_info += "\n- 请从可用工具中选择一个尚未使用且未失败的工具"
+            
             prompt = f"""你是一个智能工具选择助手。请根据用户查询选择最合适的工具，并对查询进行优化改写。
 
 用户查询: {state['query']}
 
-可用工具:
-{tools_text}
+当前可用工具:
+{tools_text}{constraint_info}
 
-请分析用户查询的意图，选择最合适的工具，并对查询进行优化改写以提高检索效果。
+请分析用户查询的意图，从可用工具中选择最合适的工具，并对查询进行优化改写以提高检索效果。
 
 要求:
-1. 选择最适合的工具
-2. 对查询进行优化改写，提取关键信息
-3. 返回JSON格式结果
+1. 只能从当前可用工具中选择（不能选择已使用或失败的工具）
+2. 选择最适合用户查询意图的工具
+3. 对查询进行优化改写，提取关键信息
+4. 返回JSON格式结果
 
 返回格式:
 {{
@@ -1815,8 +1846,8 @@ class AgentNodes:
                 return None
             
             selected_tool = result.get('selected_tool')
-            if selected_tool not in available_tools:
-                print(f"选择的工具 {selected_tool} 不在可用工具列表中")
+            if selected_tool not in available_tool_names:
+                print(f"选择的工具 {selected_tool} 不在当前可用工具列表中: {list(available_tool_names)}")
                 return None
             
             return {
@@ -1851,8 +1882,8 @@ class AgentNodes:
         print(f"🔧 执行工具: {selected_tool}")
         
         try:
-            # 执行工具
-            result = await self.tool_manager.execute_tool(selected_tool, tool_parameters)
+            # 执行工具（修复：去掉await，因为execute_tool是同步方法）
+            result = self.tool_manager.execute_tool(selected_tool, tool_parameters)
             
             if result and result.success and self._is_tool_result_valid(result, selected_tool):
                 print(f"✅ 工具执行成功")
@@ -1954,28 +1985,7 @@ class AgentNodes:
                     if tool_selection_result:
                         selected_tool = tool_selection_result.get('selected_tool')
                         
-                        # 检查工具是否已使用过或失败过多次
-                        if (selected_tool in state['used_tools'] or 
-                            state.get('tool_retry_counts', {}).get(selected_tool, 0) >= 3):
-                            print(f"⚠️ 工具 {selected_tool} 已使用过或失败次数过多，选择备用工具")
-                            # 选择未使用且未失败的备用工具
-                            from L0_agent_tools import AgentToolManager
-                            tools_instance = AgentToolManager()
-                            available_tools = tools_instance.get_available_tools()
-                            
-                            for tool_name in available_tools.keys():
-                                if (tool_name not in state['used_tools'] and 
-                                    state.get('tool_retry_counts', {}).get(tool_name, 0) < 3):
-                                    selected_tool = tool_name
-                                    print(f"✅ 选择备用工具: {selected_tool}")
-                                    break
-                            else:
-                                # 如果所有工具都用过了或失败过多，直接跳转到最终答案
-                                print(f"⚠️ 所有工具已使用或失败，跳转到最终答案生成")
-                                state['simple_workflow_step'] = 6
-                                return state
-                        
-                        # 记录已使用的工具
+                        # 记录已使用的工具（_select_tool_with_llm_for_simple已经处理了工具过滤）
                         if selected_tool not in state['used_tools']:
                             state['used_tools'].append(selected_tool)
                         state['selected_tool'] = selected_tool
@@ -2010,7 +2020,7 @@ class AgentNodes:
                 # 检查工具执行状态
                 tool_status = state.get('tool_execution_status')
                 if tool_status == 'max_retries_reached':
-                    print(f"🚫 工具达到最大重试次数，直接跳转到最终答案生成")
+                    print(f"🚫 工具达到最大重试次数，直接跳转到最终答案生成（跳过反思评估）")
                     state['simple_workflow_step'] = 6
                 elif tool_status in ['failed', 'exception']:
                     print(f"🔄 工具执行失败，重新选择工具")
@@ -2018,11 +2028,17 @@ class AgentNodes:
                 else:
                     state['simple_workflow_step'] = 4
             
-            # 步骤4: 反思评估
+            # 步骤4: 反思评估（仅在工具执行成功时进行）
             if state.get('simple_workflow_step', 4) == 4:
-                print(f"📍 步骤4/6: 反思评估")
-                state = await self.reflection_node(state)
-                state['simple_workflow_step'] = 5
+                # 检查是否因为工具重试达到上限而跳过反思
+                tool_status = state.get('tool_execution_status')
+                if tool_status == 'max_retries_reached':
+                    print(f"📍 步骤4/6: 跳过反思评估（工具重试达到上限）")
+                    state['simple_workflow_step'] = 6  # 直接跳转到最终答案生成
+                else:
+                    print(f"📍 步骤4/6: 反思评估")
+                    state = await self.reflection_node(state)
+                    state['simple_workflow_step'] = 5
             
             # 步骤5: 答案优化
             if state.get('simple_workflow_step', 5) == 5:
