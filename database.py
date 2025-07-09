@@ -223,11 +223,15 @@ class Database:
 
     async def close(self):
         """关闭所有数据库连接"""
-        if self._initialized:
-            while not self._connection_pool.empty():
-                conn = await self._connection_pool.get()
-                await conn.close()
-            self._initialized = False
+        try:
+            if self._initialized:
+                while not self._connection_pool.empty():
+                    conn = await self._connection_pool.get()
+                    await conn.close()
+                self._initialized = False
+                print("数据库连接池已关闭")
+        except Exception as e:
+            print(f"关闭数据库连接池时出现异常: {str(e)}")
 
     async def get_conversation_history(self, conversation_id: str, max_tokens: int = 100000) -> Tuple[List[Tuple], bool]:
         """
@@ -445,8 +449,8 @@ def get_mcp_tools() -> List[dict]:
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            # 如果事件循环正在运行，创建一个任务
-            task = asyncio.create_task(db.get_mcp_tools())
+            # 如果事件循环正在运行，无法同步等待，返回空列表
+            print("警告：在运行的事件循环中调用同步函数 get_mcp_tools，返回空列表")
             return []
         else:
             return loop.run_until_complete(db.get_mcp_tools())

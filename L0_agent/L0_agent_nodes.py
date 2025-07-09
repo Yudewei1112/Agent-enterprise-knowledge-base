@@ -104,13 +104,18 @@ class AgentNodes:
         if 'query' in enhanced_params:
             print(f"使用节点准备的查询: {enhanced_params.get('query', 'N/A')}")
         
-        # 检查工具是否需要模型名称参数
+        # 检查工具是否需要模型名称参数（兼容Pydantic V1和V2）
         if (hasattr(tool, 'args_schema') and 
-            tool.args_schema is not None and 
-            hasattr(tool.args_schema, '__fields__') and 
-            tool.args_schema.__fields__ is not None and
-            'model_name' in tool.args_schema.__fields__):
-            enhanced_params['model_name'] = state.get('model_name') or config.system_config['default_model']
+            tool.args_schema is not None):
+            # 兼容Pydantic V1和V2的字段检查
+            fields_dict = None
+            if hasattr(tool.args_schema, 'model_fields'):  # Pydantic V2
+                fields_dict = tool.args_schema.model_fields
+            elif hasattr(tool.args_schema, '__fields__'):  # Pydantic V1
+                fields_dict = tool.args_schema.__fields__
+            
+            if fields_dict is not None and 'model_name' in fields_dict:
+                enhanced_params['model_name'] = state.get('model_name') or config.system_config['default_model']
         
         # 可以在这里添加更多通用参数的处理逻辑
         # 例如：用户ID、会话ID、时间戳等

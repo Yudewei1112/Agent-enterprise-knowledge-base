@@ -1,12 +1,13 @@
 """Agent工具封装模块
 
 该模块将现有的检索方式封装为LangChain标准的Tool，包括：
-- 本地文档RAG检索工具
+- 本地文档RAG检索工具（基于L1 Agent RAG）
 - 联网搜索工具
 - MCP服务检索工具
 """
 
 import asyncio
+import json
 from typing import Dict, Any, Optional, List
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
@@ -25,12 +26,20 @@ from config import config
 # 统一使用绝对导入，避免类型检查问题
 from L0_agent_state import ToolResult
 
+# 导入L1 Agent RAG
+from L1_agent_rag.L1_agent_rag_tool import L1AgentRAGTool
+
 
 class LocalRAGSearchInput(BaseModel):
-    """本地RAG检索工具输入"""
-    query: str = Field(description="要检索的查询文本")
-    top_k: int = Field(default=5, description="返回的文档数量")
-    specific_file: Optional[str] = Field(default=None, description="指定文件名")
+    """本地RAG检索工具输入（基于L1 Agent RAG）"""
+    query: str = Field(description="用户查询文本")
+    top_k: int = Field(default=5, description="返回结果数量")
+    force_method: Optional[str] = Field(
+        default=None, 
+        description="强制使用的检索方法：'traditional_rag' 或 'graph_rag'，不指定则自动选择"
+    )
+    include_metadata: bool = Field(default=True, description="是否包含详细的元数据信息")
+    build_graph_if_missing: bool = Field(default=False, description="如果知识图谱不存在是否自动构建")
 
 
 class InternetSearchInput(BaseModel):
@@ -46,49 +55,125 @@ class MCPServiceInput(BaseModel):
 
 
 class LocalDocumentRAGTool(BaseTool):
-    """本地文档RAG检索工具"""
+    """本地文档RAG检索工具（基于L1 Agent RAG）
+    
+    这是一个智能RAG工具，能够：
+    1. 自动分析查询复杂度
+    2. 选择最适合的检索方法（传统RAG vs GraphRAG）
+    3. 执行检索并返回JSON格式的结果
+    4. 提供详细的执行信息和元数据
+    
+    该工具实现了"Agent as Tool"的概念，将复杂的RAG决策逻辑封装在一个工具中。
+    """
     name: str = "local_document_rag_search"
     description: str = (
-        "用于在企业内部知识库中搜索相关文档和信息。"
-        "当问题涉及公司政策、内部流程、技术文档或历史记录时使用。"
-        "支持指定特定文件进行检索。"
+        "智能RAG检索工具。能够根据查询复杂度自动选择最适合的检索方法：\n"
+        "- 对于简单的事实查询，使用传统RAG\n"
+        "- 对于复杂的关系推理查询，使用GraphRAG\n\n"
+        "输入参数：\n"
+        "- query: 用户查询文本（必需）\n"
+        "- top_k: 返回结果数量（默认5）\n"
+        "- force_method: 强制使用的方法（可选：'traditional_rag' 或 'graph_rag'）\n"
+        "- include_metadata: 是否包含元数据（默认true）\n"
+        "- build_graph_if_missing: 如果知识图谱不存在是否自动构建（默认false）\n\n"
+        "返回JSON格式的检索结果，包含答案、使用的方法、复杂度分析等信息。"
     )
     args_schema: type = LocalRAGSearchInput
-    retrieval_manager: Any = None
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.retrieval_manager = RetrievalManager()
+        self._l1_agent_tool: Optional[L1AgentRAGTool] = None
+        self._initialization_lock = asyncio.Lock()
+        self._initialized = False
     
-    async def _arun(self, query: str, top_k: int = 5, specific_file: Optional[str] = None) -> str:
+    async def _ensure_l1_agent_initialized(self) -> None:
+        """确保L1 Agent工具已初始化"""
+        if self._initialized and self._l1_agent_tool is not None:
+            return
+        
+        async with self._initialization_lock:
+            if self._initialized and self._l1_agent_tool is not None:
+                return
+            
+            try:
+                print("初始化L1 Agent RAG工具...")
+                self._l1_agent_tool = L1AgentRAGTool()
+                await self._l1_agent_tool._ensure_initialized()
+                self._initialized = True
+                print("L1 Agent RAG工具初始化完成")
+            except Exception as e:
+                print(f"L1 Agent RAG工具初始化失败: {str(e)}")
+                raise
+    
+    async def _arun(
+        self, 
+        query: str, 
+        top_k: int = 5, 
+        force_method: Optional[str] = None,
+        include_metadata: bool = True,
+        build_graph_if_missing: bool = False
+    ) -> str:
         """异步执行本地RAG检索"""
         try:
-            result = await self.retrieval_manager.retrieve(
-                'local', query,
+            # 确保L1 Agent工具已初始化
+            await self._ensure_l1_agent_initialized()
+            
+            # 调用L1 Agent RAG工具
+            result = await self._l1_agent_tool._arun(
+                query=query,
                 top_k=top_k,
-                specific_file=specific_file
+                force_method=force_method,
+                include_metadata=include_metadata,
+                build_graph_if_missing=build_graph_if_missing
             )
+            
             return result
+            
         except Exception as e:
-            return f"本地检索失败: {str(e)}"
+            error_result = {
+                "success": False,
+                "error": f"L1 Agent RAG检索失败: {str(e)}",
+                "answer": "抱歉，检索过程中出现错误。",
+                "method_used": "error",
+                "execution_time": 0.0
+            }
+            return json.dumps(error_result, ensure_ascii=False, indent=2)
     
-    def _run(self, query: str, top_k: int = 5, specific_file: Optional[str] = None) -> str:
+    def _run(
+        self, 
+        query: str, 
+        top_k: int = 5, 
+        force_method: Optional[str] = None,
+        include_metadata: bool = True,
+        build_graph_if_missing: bool = False
+    ) -> str:
         """同步执行本地RAG检索"""
         try:
-            # 创建新的事件循环来运行异步方法
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(
-                    asyncio.run,
-                    self.retrieval_manager.retrieve(
-                        'local', query,
+            # 在新的事件循环中运行异步方法
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    self._arun(
+                        query=query,
                         top_k=top_k,
-                        specific_file=specific_file
+                        force_method=force_method,
+                        include_metadata=include_metadata,
+                        build_graph_if_missing=build_graph_if_missing
                     )
                 )
-                return future.result()
+                return result
+            finally:
+                loop.close()
         except Exception as e:
-            return f"本地检索失败: {str(e)}"
+            error_result = {
+                "success": False,
+                "error": f"L1 Agent RAG工具执行失败: {str(e)}",
+                "answer": "抱歉，检索过程中出现错误。",
+                "method_used": "error",
+                "execution_time": 0.0
+            }
+            return json.dumps(error_result, ensure_ascii=False, indent=2)
 
 
 class InternetSearchTool(BaseTool):
@@ -310,7 +395,15 @@ class AgentToolManager:
         try:
             # 使用同步方法执行工具
             print(f"开始执行工具 {tool_name}...")
-            result = tool._run(**params)
+            
+            # 对于local_document_rag_search工具，需要处理新的参数结构
+            if tool_name == "local_document_rag_search":
+                # 移除旧的specific_file参数，如果存在的话
+                filtered_params = {k: v for k, v in params.items() if k != 'specific_file'}
+                result = tool._run(**filtered_params)
+            else:
+                result = tool._run(**params)
+                
             print(f"工具执行完成，结果长度: {len(str(result))}")
             print(f"工具执行结果预览: {str(result)[:200]}...")
             
@@ -359,7 +452,15 @@ class AgentToolManager:
         try:
             # 使用异步方法执行工具
             print(f"开始执行工具 {tool_name}...")
-            result = await tool._arun(**kwargs)
+            
+            # 对于local_document_rag_search工具，需要处理新的参数结构
+            if tool_name == "local_document_rag_search":
+                # 移除旧的specific_file参数，如果存在的话
+                filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'specific_file'}
+                result = await tool._arun(**filtered_kwargs)
+            else:
+                result = await tool._arun(**kwargs)
+                
             print(f"工具执行完成，结果长度: {len(str(result))}")
             print(f"工具执行结果预览: {str(result)[:200]}...")
             

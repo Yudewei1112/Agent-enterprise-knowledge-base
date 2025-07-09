@@ -141,9 +141,9 @@ class Config:
             "vector_cache_file": "cache/vector_cache.pkl",
             "embedding_cache_file": "cache/embedding_cache.pkl",
             "database_file": "storage/history_messages.db",
-            "max_chunk_chars": 500,
+            "max_chunk_chars": 1000,
             "chunk_overlap": 100,
-            "excel_max_chunk_chars": 1000,
+            "excel_max_chunk_chars": 2000,
             "excel_chunk_overlap": 0,
             "system_check_interval": 60,
             "document_check_interval": 300,  # 文档检查间隔（秒）
@@ -303,3 +303,11 @@ class Config:
 
 # 创建全局配置实例
 config = Config()
+
+def get_config() -> Config:
+    """获取全局配置实例
+    
+    返回:
+        Config: 全局配置实例
+    """
+    return config

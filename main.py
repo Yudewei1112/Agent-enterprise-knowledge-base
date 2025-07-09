@@ -35,6 +35,9 @@ from retrieval_methods import RetrievalManager
 from database import db
 from mcp_api import router as mcp_router
 from L0_agent.L0_agent import LangGraphAgent
+# 添加 GraphRAG 相关导入
+from L1_agent_rag.config import GraphRAGConfig
+from L1_agent_rag.L1_agent_rag import L1AgentRAG
 
 # 全局变量
 client: Optional[AsyncOpenAI] = None
@@ -286,6 +289,49 @@ async def initialize_system():
             print("文档处理器初始化失败")
             return False
     
+    # 检查GraphRAG多图谱是否存在
+    graph_config = GraphRAGConfig()
+    
+    if not graph_config.has_existing_graphs():
+        print("检测到知识图谱文件缺失，开始创建知识图谱...")
+        print(f"多图谱目录: {graph_config.get_multi_graphs_dir()}")
+        
+        l1_agent = None
+        try:
+            # 初始化L1AgentRAG
+            l1_agent = L1AgentRAG()
+            
+            # 构建知识图谱
+            print("开始构建知识图谱...")
+            success = await l1_agent.build_knowledge_graph(force_rebuild=True)
+            
+            if success:
+                print("知识图谱创建完成")
+            else:
+                print("知识图谱创建失败")
+                # 不返回False，允许系统继续运行
+        except Exception as e:
+            print(f"知识图谱创建过程中出现异常: {str(e)}")
+            # 不返回False，允许系统继续运行
+        finally:
+            # 确保清理资源
+            if l1_agent is not None:
+                try:
+                    # 如果L1AgentRAG有清理方法，在这里调用
+                    if hasattr(l1_agent, 'cleanup'):
+                        await l1_agent.cleanup()
+                except Exception as cleanup_error:
+                    print(f"清理L1AgentRAG资源时出现异常: {str(cleanup_error)}")
+                finally:
+                    del l1_agent
+    else:
+        print("检测到知识图谱文件已存在，跳过创建...")
+        # 显示已有图谱信息
+        multi_graphs_dir = Path(graph_config.get_multi_graphs_dir())
+        if multi_graphs_dir.exists():
+            graph_files = list(multi_graphs_dir.glob("*.json"))
+            print(f"已有图谱文件数量: {len(graph_files)}")
+    
     # 初始化检索管理器
     retrieval_manager = RetrievalManager(document_processor)
     
@@ -315,7 +361,23 @@ async def lifespan(app: FastAPI):
     await initialize_system()
     yield
     # 关闭时清理资源
-    await db.close()
+    print("正在关闭应用，清理资源...")
+    try:
+        # 清理全局L1AgentRAGTool实例
+        from L1_agent_rag.L1_agent_rag_tool import get_l1_agent_rag_tool
+        l1_tool = get_l1_agent_rag_tool()
+        if hasattr(l1_tool, 'cleanup'):
+            await l1_tool.cleanup()
+    except Exception as e:
+        print(f"清理L1AgentRAGTool时出现异常: {str(e)}")
+    
+    try:
+        # 清理数据库连接
+        await db.close()
+    except Exception as e:
+        print(f"关闭数据库连接时出现异常: {str(e)}")
+    
+    print("应用资源清理完成")
 
 # 创建FastAPI应用
 app = FastAPI(
