@@ -678,16 +678,141 @@ A: 检查网络连接和API密钥配置，调整超时设置
 
 ### Docker部署 (推荐)
 
-```bash
-# 构建镜像
-docker build -t ai-knowledge-base .
+#### 🔧 环境准备
 
-# 运行容器
-docker run -d -p 8000:8000 \
-  -v $(pwd)/.env:/app/.env \
-  -v $(pwd)/uploads:/app/uploads \
-  ai-knowledge-base
+确保已安装：
+- **Docker 20.10+**
+- **Docker Compose 2.0+**
+- **Docker Desktop** (Windows/macOS)
+
+#### 🚀 快速部署
+
+**方法一：一键部署脚本 (推荐)**
+
+```bash
+# 进入Docker目录
+cd docker
+
+# 配置环境变量
+copy .env.docker.example .env
+# 编辑 .env 文件，配置API密钥
+
+# Windows一键部署
+deploy.bat
+
+# 或 Linux/macOS一键部署
+chmod +x deploy.sh
+./deploy.sh
 ```
+
+**方法二：手动部署**
+
+```bash
+# 1. 进入Docker目录
+cd docker
+
+# 2. 配置环境变量
+cp .env.docker.example .env
+# 编辑 .env 文件，填入实际的API密钥
+
+# 3. 构建并启动服务
+docker-compose build
+docker-compose up -d
+
+# 4. 查看服务状态
+docker-compose ps
+
+# 5. 查看日志
+docker-compose logs -f
+```
+
+#### 📋 必需的API密钥配置
+
+在 `.env` 文件中配置以下API密钥：
+
+```env
+# 大模型API配置 (至少配置一个)
+GLM_4_PLUS_API_KEY=your_glm_api_key_here
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+QWEN_API_KEY=your_qwen_api_key_here
+CLAUDE_API_KEY=your_claude_api_key_here
+
+# 搜索服务配置 (可选)
+BOCHA_API_KEY=your_bocha_api_key_here
+```
+
+#### 🌐 访问应用
+
+部署成功后，在浏览器中访问：
+- **主页面**: http://localhost:8000
+- **API文档**: http://localhost:8000/docs
+- **MCP接口**: http://localhost:8000/mcp
+- **文档管理**: http://localhost:8000/docs
+
+#### 🔧 常用管理命令
+
+```bash
+# 查看服务状态
+docker-compose ps
+
+# 查看实时日志
+docker-compose logs -f knowledge-base
+
+# 重启服务
+docker-compose restart
+
+# 停止服务
+docker-compose down
+
+# 重建服务
+docker-compose up --build -d
+
+# 进入容器
+docker-compose exec knowledge-base bash
+
+# 健康检查
+docker-compose exec knowledge-base python /app/docker/health_check.py
+```
+
+#### 🛠️ 故障排除
+
+**常见问题及解决方案：**
+
+1. **Docker Desktop 未启动**
+   ```
+   错误: Cannot connect to the Docker daemon
+   解决: 确保 Docker Desktop 正在运行
+   ```
+
+2. **端口被占用**
+   ```
+   错误: Port 8000 is already in use
+   解决: 修改 docker-compose.yml 中的端口映射为 "8001:8000"
+   ```
+
+3. **API密钥未配置**
+   ```
+   错误: 应用启动但功能异常
+   解决: 检查 .env 文件中的API密钥是否正确配置
+   ```
+
+4. **内存不足**
+   ```
+   错误: 容器启动失败
+   解决: 在 Docker Desktop 设置中增加内存分配（建议至少4GB）
+   ```
+
+#### 📊 数据持久化
+
+项目数据会自动保存到以下目录：
+- `./storage`: 应用数据和向量索引
+- `./uploads`: 上传的文档文件
+- `./cache`: 缓存数据
+- `./logs`: 应用日志文件
+
+#### 📖 详细文档
+
+更多Docker部署详情请参考：[docker/README.md](docker/README.md)
 
 ### 生产环境部署
 

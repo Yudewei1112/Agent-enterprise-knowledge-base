@@ -1,0 +1,98 @@
+# Git相关
+.git
+.gitignore
+
+# Python缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+PIPFILE.lock
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDE相关
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统相关
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+
+# 缓存目录（构建时会重新创建）
+cache/
+
+# 用户上传的文件（运行时挂载）
+uploads/
+
+# 存储目录（运行时挂载）
+storage/
+
+# 推理链目录（运行时挂载）- 已移除推理可视化功能
+# reasoning_chains/
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 测试相关
+.coverage
+.pytest_cache/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# 文档
+*.md
+README*
+CHANGELOG*
+LICENSE*
+
+# Docker相关
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# 其他
+*.bak
+*.orig

@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  knowledge-base:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: agent-knowledge-base
+    ports:
+      - "8000:8000"
+    environment:
+      # 模型配置 - 请根据实际情况设置API密钥
+      - GLM_4_PLUS_MODEL=glm-4-plus
+      - GLM_4_PLUS_API_KEY=${GLM_4_PLUS_API_KEY:-}
+      - GLM_4_PLUS_API_BASE=https://open.bigmodel.cn/api/paas/v4/
+      
+      - DEEPSEEK_MODEL=deepseek-reasoner
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_API_BASE=https://api.deepseek.com/v1
+      
+      - QWEN_MODEL=qwen3-235b-a22b
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
+      - QWEN_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
+      
+      - CLAUDE_MODEL=claude-3-7-sonnet
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY:-}
+      - CLAUDE_API_BASE=https://api.anthropic.com/v1
+      
+      # 搜索配置
+      - BOCHA_API_KEY=${BOCHA_API_KEY:-}
+      - BOCHA_API_BASE=https://api.bochaai.com/v1/web-search
+      - BOCHA_TIMEOUT=30
+      
+      # 系统配置
+      - DEFAULT_MODEL=glm-4-plus
+      - CONVERSATION_HISTORY_LIMIT=10
+      
+      # ReAct推理引擎配置
+      - MAX_REASONING_STEPS=5
+      - COMPLEXITY_THRESHOLD=0.7
+      - REASONING_TEMPERATURE=0.3
+      - ENABLE_REASONING_LOGS=true
+      - ENABLE_COMPLEXITY_EVALUATION=true
+      - CIRCUIT_BREAKER_THRESHOLD=3
+      - REASONING_TIMEOUT=300
+      - CONFIDENCE_THRESHOLD=0.6
+    volumes:
+      # 持久化存储
+      - ../storage:/app/storage
+      - ../uploads:/app/uploads
+      - ../cache:/app/cache
+      - ../logs:/app/logs
+      # 本地模型文件（如果有）
+      - ../local_m3e_model:/app/local_m3e_model
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "/app/docker/health_check.py", "--simple"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - knowledge-base-network
+
+networks:
+  knowledge-base-network:
+    driver: bridge
+
+volumes:
+  storage:
+  uploads:
+  cache:
+  logs:
+  # reasoning_chains:  # 已移除推理可视化功能
